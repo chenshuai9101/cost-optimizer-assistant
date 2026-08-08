@@ -4,7 +4,7 @@ Prompt压缩模块
 
 import re
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from dataclasses import dataclass
 
 

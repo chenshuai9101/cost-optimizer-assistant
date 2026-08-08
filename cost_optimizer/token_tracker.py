@@ -2,9 +2,8 @@
 Token追踪模块
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, List
 from collections import defaultdict
 import time
 

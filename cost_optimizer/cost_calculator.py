@@ -3,8 +3,8 @@
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
-from . import ALL_PRICING
+from typing import Dict, Optional
+from .pricing import ALL_PRICING
 
 
 @dataclass

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install --quiet -e .
+      - name: Compile all Python sources
+        run: |
+          set -e
+          find . -name "*.py" -not -path "./.git/*" -print0 | xargs -0 -n1 python -m py_compile
+      - name: Core smoke test
+        run: |
+          python - <<'PY'
+          import asyncio
+          from cost_optimizer import CostOptimizer, CostConfig, TokenTracker, CostCalculator
+          opt = CostOptimizer(CostConfig())
+          tt = TokenTracker(); tt.track(model="gpt-4o", prompt_tokens=1000, completion_tokens=500)
+          assert tt.get_total_tokens() == 1500
+          cc = CostCalculator(); assert cc.calculate(model="gpt-4o", prompt_tokens=1000, completion_tokens=500).total_cost > 0
+          r = asyncio.run(opt.call_llm(prompt="hello world test prompt", model="gpt-4o"))
+          assert r.content.startswith("[Mock response")
+          r2 = asyncio.run(opt.call_llm(prompt="hello world test prompt", model="gpt-4o"))
+          assert r2.cache_hit is True
+          print("smoke OK")
+          PY

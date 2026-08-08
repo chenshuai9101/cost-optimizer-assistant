@@ -6,14 +6,13 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Any, Callable, Awaitable
 import asyncio
 import time
-import json
 
 from .config import CostConfig
-from .token_tracker import TokenTracker, TokenRecord
-from .cost_calculator import CostCalculator, CostRecord
+from .token_tracker import TokenTracker
+from .cost_calculator import CostCalculator
 from .cache import CacheManager, ExactCache, SemanticCache
 from .compressor import PromptCompressor, CompressionResult
-from .monitor import CostMonitor, CostReport, CostAlert
+from .monitor import CostMonitor, CostReport
 
 
 @dataclass
@@ -131,22 +130,9 @@ class CostOptimizer:
     async def _execute_request(self, request: LLMRequest) -> LLMResponse:
         """执行请求"""
         start_time = time.time()
-        
-        # 1. 缓存检查
-        cache_hit = False
-        if self.cache_manager and not request.disable_cache:
-            cached_result, cache_hit = await self.cache_manager.get_or_compute(
-                prompt=request.prompt,
-                model=request.model,
-                compute_fn=lambda: None  # 临时值
-            )
-            
-            if cache_hit and cached_result is not None:
-                # 从缓存获取结果
-                return self._build_response_from_cache(cached_result, request, start_time)
-        
-        # 2. Prompt压缩
         original_prompt = request.prompt
+        
+        # 1. Prompt压缩
         compression_result: Optional[CompressionResult] = None
         compression_savings = 0.0
         
@@ -154,6 +140,14 @@ class CostOptimizer:
             compression_result = self.compressor.compress_with_report(request.prompt)
             request.prompt = compression_result.compressed
             compression_savings = compression_result.savings_percent
+        
+        # 2. 缓存检查（精确缓存）
+        cache_hit = False
+        if self.cache_manager and not request.disable_cache:
+            cached_content = self.cache_manager.exact.get(original_prompt, request.model)
+            if cached_content is not None:
+                self.cache_manager.stats["exact_hits"] += 1
+                return self._build_response_from_cache(cached_content, request, start_time)
         
         # 3. 调用LLM
         if self.llm_callable:
@@ -166,7 +160,8 @@ class CostOptimizer:
         self._record_usage(request, response, cache_hit, compression_savings)
         
         # 5. 存入缓存
-        if self.cache_manager and not request.disable_cache and not cache_hit:
+        if self.cache_manager and not request.disable_cache:
+            self.cache_manager.stats["misses"] += 1
             self.cache_manager.exact.set(
                 original_prompt,
                 request.model,
